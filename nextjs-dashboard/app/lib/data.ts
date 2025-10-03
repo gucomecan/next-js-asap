@@ -8,21 +8,12 @@ import {
   Revenue,
 } from './definitions';
 import { formatCurrency } from './utils';
-import { log } from 'console';
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: 'require' });
 
 export async function fetchRevenue() {
   try {
-    // Artificially delay a response for demo purposes.
-    // Don't do this in production :)
-
-    console.log('Fetching revenue data...');
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-
     const data = await sql<Revenue[]>`SELECT * FROM revenue`;
-
-    console.log('Data revenue fetch completed after 3 seconds.');
 
     return data;
   } catch (error) {
@@ -34,16 +25,11 @@ export async function fetchRevenue() {
 export async function fetchLatestInvoices() {
   try {
     const data = await sql<LatestInvoiceRaw[]>`
-      SELECT invoices.amount, customers.name, customers.image_url, customers.email, invoices.id
+      SELECT DISTINCT ON (customers.id) invoices.amount, customers.name, customers.image_url, customers.email, invoices.id
       FROM invoices
       JOIN customers ON invoices.customer_id = customers.id
-      ORDER BY invoices.date DESC
+      ORDER BY customers.id, invoices.date DESC
       LIMIT 5`;
-
-    console.log('Fetching latest invoices data...');
-    await new Promise((resolve) => setTimeout(resolve, 5000));
-
-    console.log('Data invoices fetch completed after 5 seconds.');
 
     const latestInvoices = data.map((invoice) => ({
       ...invoice,
@@ -75,11 +61,6 @@ export async function fetchCardData() {
     const totalPaidInvoices = formatCurrency(data[2][0].paid ?? '0');
     const totalPendingInvoices = formatCurrency(data[2][0].pending ?? '0');
 
-    console.log('Fetching cards data...');
-    await new Promise((resolve) => setTimeout(resolve, 6000));
-
-    console.log('Data cards fetch completed after 6 seconds.');
-
     return {
       numberOfCustomers,
       numberOfInvoices,
@@ -98,7 +79,7 @@ export async function fetchFilteredInvoices(query: string, currentPage: number) 
 
   try {
     const invoices = await sql<InvoicesTable[]>`
-      SELECT
+      SELECT DISTINCT ON (customers.id)
         invoices.id,
         invoices.amount,
         invoices.date,
@@ -114,7 +95,7 @@ export async function fetchFilteredInvoices(query: string, currentPage: number) 
         invoices.amount::text ILIKE ${`%${query}%`} OR
         invoices.date::text ILIKE ${`%${query}%`} OR
         invoices.status ILIKE ${`%${query}%`}
-      ORDER BY invoices.date DESC
+      ORDER BY customers.id, invoices.date DESC
       LIMIT ${ITEMS_PER_PAGE} OFFSET ${offset}
     `;
 
@@ -139,6 +120,7 @@ export async function fetchInvoicesPages(query: string) {
   `;
 
     const totalPages = Math.ceil(Number(data[0].count) / ITEMS_PER_PAGE);
+
     return totalPages;
   } catch (error) {
     console.error('Database Error:', error);
